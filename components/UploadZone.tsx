@@ -1,6 +1,12 @@
 "use client";
 
-import { ChangeEvent, DragEvent, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  DragEvent,
+  useRef,
+  useState,
+} from "react";
+import { extractTextFromImage, OCRProgress } from "@/lib/ocr";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -10,12 +16,24 @@ const ACCEPTED_TYPES = [
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
+type ProcessingState = "idle" | "processing" | "complete" | "error";
+
 export default function UploadZone() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingState, setProcessingState] =
+    useState<ProcessingState>("idle");
+
+  const [ocrProgress, setOcrProgress] = useState<OCRProgress>({
+    status: "Starting OCR",
+    progress: 0,
+  });
+
+  const [extractedText, setExtractedText] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
 
   const validateFile = (selectedFile: File) => {
     if (!ACCEPTED_TYPES.includes(selectedFile.type)) {
@@ -35,6 +53,9 @@ export default function UploadZone() {
   const handleFile = (selectedFile: File) => {
     if (validateFile(selectedFile)) {
       setFile(selectedFile);
+      setProcessingState("idle");
+      setExtractedText("");
+      setIsCopied(false);
     }
   };
 
@@ -70,6 +91,9 @@ export default function UploadZone() {
   const removeFile = () => {
     setFile(null);
     setError(null);
+    setProcessingState("idle");
+    setExtractedText("");
+    setIsCopied(false);
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -77,7 +101,9 @@ export default function UploadZone() {
   };
 
   const openFilePicker = () => {
-    inputRef.current?.click();
+    if (processingState !== "processing") {
+      inputRef.current?.click();
+    }
   };
 
   const formatFileSize = (bytes: number) => {
@@ -87,6 +113,68 @@ export default function UploadZone() {
 
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
+
+  const handleAnalyze = async () => {
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== "image/png" && file.type !== "image/jpeg") {
+      setError(
+        "PDF processing isn't connected yet. Image OCR is ready to test.",
+      );
+      return;
+    }
+
+    setError(null);
+    setExtractedText("");
+    setIsCopied(false);
+    setProcessingState("processing");
+
+    try {
+      const text = await extractTextFromImage(file, (progress) => {
+        setOcrProgress(progress);
+      });
+
+      if (!text) {
+        throw new Error("No text could be detected in this image.");
+      }
+
+      setExtractedText(text);
+      setProcessingState("complete");
+    } catch (ocrError) {
+      console.error("OCR failed:", ocrError);
+
+      setError(
+        ocrError instanceof Error
+          ? ocrError.message
+          : "We couldn't extract text from this image.",
+      );
+
+      setProcessingState("error");
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!extractedText) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(extractedText);
+
+      setIsCopied(true);
+
+      window.setTimeout(() => {
+        setIsCopied(false);
+      }, 2000);
+    } catch (copyError) {
+      console.error("Failed to copy extracted text:", copyError);
+      setError("Couldn't copy the extracted text.");
+    }
+  };
+
+  const progressPercentage = Math.round(ocrProgress.progress * 100);
 
   return (
     <div className="mx-auto mt-14 max-w-3xl">
@@ -199,7 +287,9 @@ export default function UploadZone() {
               </div>
 
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{file.name}</p>
+                <p className="truncate text-sm font-medium">
+                  {file.name}
+                </p>
 
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)]">
                   {formatFileSize(file.size)}
@@ -210,19 +300,118 @@ export default function UploadZone() {
             <button
               type="button"
               onClick={removeFile}
-              className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
+              disabled={processingState === "processing"}
+              className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Remove
             </button>
           </div>
 
-          <button
-            type="button"
-            onClick={openFilePicker}
-            className="mt-6 w-full rounded-xl bg-[var(--accent)] px-5 py-3.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
-          >
-            Analyze Content
-          </button>
+          {processingState === "processing" && (
+            <div className="mt-8 border-t border-[var(--border)] pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                    Extracting text
+                  </p>
+
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    {ocrProgress.status}
+                  </p>
+                </div>
+
+                <span className="font-mono text-sm">
+                  {progressPercentage}%
+                </span>
+              </div>
+
+              <div className="mt-4 h-1 overflow-hidden rounded-full bg-[var(--border)]">
+                <div
+                  className="h-full bg-[var(--accent)] transition-all duration-300"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+
+              <div className="mt-5 space-y-2 font-mono text-[10px] uppercase tracking-wider">
+                <p className="text-[var(--accent)]">
+                  ✓ File validated
+                </p>
+
+                <p className="text-[var(--accent)]">
+                  ✓ Image detected
+                </p>
+
+                <p className="text-[var(--foreground)]">
+                  ◉ Extracting text
+                </p>
+
+                <p className="text-[var(--muted)]">
+                  ○ Analyzing content
+                </p>
+              </div>
+            </div>
+          )}
+
+          {processingState === "complete" && (
+            <div className="mt-8 border-t border-[var(--border)] pt-6">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-[var(--accent)]">✓</span>
+
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                    Extracted content
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleCopy}
+                  className="flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)] transition-all hover:border-[var(--foreground)]/30 hover:text-[var(--foreground)]"
+                >
+                  <span>{isCopied ? "✓" : "□"}</span>
+                  {isCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+
+              <div className="mt-4 max-h-64 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--background)] p-5">
+                <p className="whitespace-pre-wrap text-sm leading-7 text-[var(--muted)]">
+                  {extractedText}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleAnalyze}
+                className="mt-5 w-full rounded-xl bg-[var(--accent)] px-5 py-3.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
+              >
+                Analyze Again
+              </button>
+            </div>
+          )}
+
+          {processingState === "error" && error && (
+            <div className="mt-8 border-t border-[var(--border)] pt-6">
+              <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+                <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-red-400">
+                  Extraction failed
+                </p>
+
+                <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+                  {error}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {processingState === "idle" && (
+            <button
+              type="button"
+              onClick={handleAnalyze}
+              className="mt-6 w-full rounded-xl bg-[var(--accent)] px-5 py-3.5 text-sm font-semibold text-black transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
+            >
+              Analyze Content
+            </button>
+          )}
         </div>
       )}
     </div>

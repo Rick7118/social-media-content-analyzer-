@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { extractTextFromImage, OCRProgress } from "@/lib/ocr";
+import { extractTextFromPDF } from "@/lib/pdf";
 import ExtractedText from "@/components/ExtractedText";
 import ProcessingState from "@/components/ProcessingState";
 
@@ -30,7 +31,7 @@ export default function UploadZone() {
     useState<ProcessingStatus>("idle");
 
   const [ocrProgress, setOcrProgress] = useState<OCRProgress>({
-    status: "Starting OCR",
+    status: "Starting extraction",
     progress: 0,
   });
 
@@ -56,6 +57,11 @@ export default function UploadZone() {
       setFile(selectedFile);
       setProcessingState("idle");
       setExtractedText("");
+      setError(null);
+      setOcrProgress({
+        status: "Starting extraction",
+        progress: 0,
+      });
     }
   };
 
@@ -93,6 +99,10 @@ export default function UploadZone() {
     setError(null);
     setProcessingState("idle");
     setExtractedText("");
+    setOcrProgress({
+      status: "Starting extraction",
+      progress: 0,
+    });
 
     if (inputRef.current) {
       inputRef.current.value = "";
@@ -118,35 +128,46 @@ export default function UploadZone() {
       return;
     }
 
-    if (file.type !== "image/png" && file.type !== "image/jpeg") {
-      setError(
-        "PDF processing isn't connected yet. Image OCR is ready to test.",
-      );
-      return;
-    }
-
     setError(null);
     setExtractedText("");
     setProcessingState("processing");
 
+    setOcrProgress({
+      status:
+        file.type === "application/pdf"
+          ? "Reading PDF"
+          : "Starting OCR",
+      progress: 0,
+    });
+
     try {
-      const text = await extractTextFromImage(file, (progress) => {
-        setOcrProgress(progress);
-      });
+      let text = "";
+
+      if (file.type === "application/pdf") {
+        text = await extractTextFromPDF(file, (progress) => {
+          setOcrProgress(progress);
+        });
+      } else {
+        text = await extractTextFromImage(file, (progress) => {
+          setOcrProgress(progress);
+        });
+      }
 
       if (!text) {
-        throw new Error("No text could be detected in this image.");
+        throw new Error(
+          "No text could be extracted from this file.",
+        );
       }
 
       setExtractedText(text);
       setProcessingState("complete");
-    } catch (ocrError) {
-      console.error("OCR failed:", ocrError);
+    } catch (processingError) {
+      console.error("Content extraction failed:", processingError);
 
       setError(
-        ocrError instanceof Error
-          ? ocrError.message
-          : "We couldn't extract text from this image.",
+        processingError instanceof Error
+          ? processingError.message
+          : "We couldn't extract content from this file.",
       );
 
       setProcessingState("error");
@@ -225,7 +246,9 @@ export default function UploadZone() {
 
           {error && (
             <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-red-500/20 bg-red-500/5 px-4 py-3">
-              <p className="font-mono text-xs text-red-400">{error}</p>
+              <p className="font-mono text-xs text-red-400">
+                {error}
+              </p>
 
               <button
                 type="button"
@@ -305,6 +328,14 @@ export default function UploadZone() {
                 <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
                   {error}
                 </p>
+
+                <button
+                  type="button"
+                  onClick={handleAnalyze}
+                  className="mt-4 rounded-lg border border-[var(--border)] px-4 py-2 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)] transition-colors hover:border-[var(--foreground)]/30 hover:text-[var(--foreground)]"
+                >
+                  Try again
+                </button>
               </div>
             </div>
           )}

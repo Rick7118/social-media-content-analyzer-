@@ -5,11 +5,12 @@ export type OCRProgress = {
   progress: number;
 };
 
-export async function extractTextFromImage(
-  file: File,
-  onProgress?: (progress: OCRProgress) => void,
-): Promise<string> {
-  const worker = await createWorker("eng", 1, {
+type ProgressCallback = (progress: OCRProgress) => void;
+
+async function createOCRWorker(
+  onProgress?: ProgressCallback,
+) {
+  return createWorker("eng", 1, {
     logger: (message) => {
       onProgress?.({
         status: message.status,
@@ -17,11 +18,35 @@ export async function extractTextFromImage(
       });
     },
   });
+}
+
+export async function extractTextFromImage(
+  file: File,
+  onProgress?: ProgressCallback,
+): Promise<string> {
+  const worker = await createOCRWorker(onProgress);
 
   try {
     const {
       data: { text },
     } = await worker.recognize(file);
+
+    return text.trim();
+  } finally {
+    await worker.terminate();
+  }
+}
+
+export async function extractTextFromCanvas(
+  canvas: HTMLCanvasElement,
+  onProgress?: ProgressCallback,
+): Promise<string> {
+  const worker = await createOCRWorker(onProgress);
+
+  try {
+    const {
+      data: { text },
+    } = await worker.recognize(canvas);
 
     return text.trim();
   } finally {

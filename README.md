@@ -39,6 +39,18 @@ The entire pipeline runs in the browser. Files are processed locally without req
 
 ---
 
+## Approach
+
+ContentIQ was built as a client-side processing pipeline focused on keeping content extraction, analysis, and presentation independent.
+
+The application accepts screenshots and PDF documents, validates them locally, and extracts their text using PDF.js for text-based PDFs and Tesseract.js when OCR is required. This also allows scanned PDFs to be handled without introducing a backend service.
+
+The extracted text is passed to a deterministic analysis engine that evaluates five structural signals: hook, clarity, readability, engagement, and call to action. Each metric contributes a weighted score, which is normalized to a 0–100 result. The analyser also generates strengths, improvements, and basic content statistics.
+
+The UI was designed around explicit processing and error states so users can see what the application is doing during extraction and analysis. Keeping the pipeline client-side also means uploaded content does not need to leave the user's device.
+
+The current implementation deliberately uses deterministic heuristics rather than an external LLM, making the scoring transparent and reproducible. The architecture leaves room for more advanced semantic analysis in future iterations.
+
 ## Features
 
 - PDF, PNG, JPG, and JPEG support

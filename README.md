@@ -2,6 +2,8 @@
 
 ContentIQ is a client-side content analysis tool that extracts text from social media screenshots and PDF documents, evaluates structural content signals, and turns the results into an explainable score with actionable feedback.
 
+[Live Demo](https://socialmedia-contentanalyzer.vercel.app/)
+
 ---
 
 ## Overview

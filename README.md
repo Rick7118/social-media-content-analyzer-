@@ -1,18 +1,18 @@
 # ContentIQ
 
-ContentIQ is a client-side content analysis tool that extracts text from social media screenshots and PDF documents, evaluates the content using an explainable heuristic scoring engine, and provides actionable feedback on structure, readability, engagement, and calls to action.
+ContentIQ is a client-side content analysis tool that extracts text from social media screenshots and PDF documents, evaluates structural content signals, and turns the results into an explainable score with actionable feedback.
 
 ---
 
 ## Overview
 
-ContentIQ provides a simple workflow:
+ContentIQ follows a simple processing pipeline:
 
 ```text
 Image / PDF
      │
      ▼
-Content extraction
+Text extraction
      │
      ├── PDF.js
      └── Tesseract.js
@@ -30,30 +30,30 @@ Content analysis
      └── Call to action
      │
      ▼
-Score + recommendations
+Score + feedback
 ```
 
-Everything is processed locally in the browser. Uploaded files and extracted text do not need to be sent to a backend service.
+The entire pipeline runs in the browser. Files are processed locally without requiring an application backend or external AI service.
 
 ---
 
 ## Features
 
-- Upload PDF, PNG, JPG, and JPEG files
-- Drag-and-drop file input
+- PDF, PNG, JPG, and JPEG support
+- Drag-and-drop uploads
 - PDF text extraction with PDF.js
-- OCR using Tesseract.js
-- OCR fallback for scanned PDFs
-- Real-time extraction progress
-- Explainable content scoring
-- Actionable strengths and improvements
-- Extracted-text preview with copy functionality
+- OCR with Tesseract.js
+- Automatic OCR fallback for scanned PDFs
+- Extraction progress and processing states
+- Explainable scoring across five content dimensions
+- Targeted strengths and improvement suggestions
+- Extracted-text preview with one-click copying
 - Client-side processing with no required API keys
-- Responsive dark interface
+- Responsive interface
 
 ### Scoring
 
-Content is evaluated across five dimensions:
+The analysis engine evaluates five dimensions using weighted scores:
 
 | Metric | Weight |
 | --- | ---: |
@@ -63,62 +63,50 @@ Content is evaluated across five dimensions:
 | Engagement | 20% |
 | Call to action | 15% |
 
-The final score is normalized to a `0–100` range.
+The weighted result is normalized to a `0–100` score.
 
 ---
 
 ## Tech Stack
 
-- **Next.js**
-- **React**
-- **TypeScript**
-- **Tailwind CSS**
-- **PDF.js**
-- **Tesseract.js**
+- **Next.js** — application framework
+- **React** — user interface
+- **TypeScript** — type-safe application logic
+- **Tailwind CSS** — styling
+- **PDF.js** — PDF text extraction
+- **Tesseract.js** — browser-based OCR
 
-The current analysis engine is deterministic and does not require an external AI model.
+The analysis engine is deterministic and does not depend on an external AI model.
 
 ---
 
 ## Architecture
 
-The application separates extraction, analysis, and presentation.
-
-```text
-app/
-└── Application entry points
-
-components/
-├── UploadZone.tsx
-├── ProcessingState.tsx
-├── ExtractedText.tsx
-└── AnalysisResults.tsx
-
-lib/
-├── pdf.ts
-├── ocr.ts
-└── analyser.ts
-```
+ContentIQ keeps extraction, analysis, and presentation separate so that each part of the pipeline can evolve independently.
 
 ### Extraction
 
-`lib/pdf.ts` handles PDF text extraction and scanned-document fallback.
+`lib/pdf.ts` handles PDF text extraction and determines when scanned content requires OCR.
 
-`lib/ocr.ts` handles OCR-based extraction from images and scanned content.
+`lib/ocr.ts` handles OCR for images and scanned documents using Tesseract.js.
 
 ### Analysis
 
-`lib/analyser.ts` contains the deterministic scoring engine.
+`lib/analyser.ts` contains the content scoring engine.
 
-It converts extracted text into a typed `AnalysisResult` containing:
+Extracted text is converted into a typed `AnalysisResult` containing:
 
 - overall score
-- metric scores
+- individual metric scores
 - strengths
 - improvements
 - content statistics
 
-The analyser is independent from the UI.
+The analysis engine has no dependency on the React UI.
+
+### Presentation
+
+React components handle file selection, processing states, extracted text, and analysis results. They consume the output of the extraction and analysis layers rather than implementing that logic themselves.
 
 ---
 
@@ -132,7 +120,7 @@ The analyser is independent from the UI.
 ### Installation
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/Rick7118/social-media-content-analyzer-.git
 cd social-media-content-analyzer
 npm install
 ```
@@ -143,12 +131,19 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:3000`.
+Then open `http://localhost:3000`.
 
-### Production build
+### Production
+
+Build the application:
 
 ```bash
 npm run build
+```
+
+Start the production server:
+
+```bash
 npm start
 ```
 
@@ -158,19 +153,19 @@ npm start
 
 ### 1. Validate
 
-The application checks the file type and size before processing.
+The application validates the uploaded file before processing it, including its format and size.
 
-Maximum file size: **10 MB**.
+The maximum supported file size is **10 MB**.
 
 ### 2. Extract
 
-PDFs are processed with PDF.js. Image content and scanned documents use Tesseract.js when OCR is required.
+Text-based PDFs are processed with PDF.js. Images and scanned PDFs are processed with Tesseract.js when OCR is required.
 
 ### 3. Analyze
 
-The extracted text is evaluated for structural signals including:
+The extracted text is evaluated for structural signals such as:
 
-- opening/hook patterns
+- opening and hook patterns
 - sentence length
 - vague wording
 - interaction signals
@@ -178,7 +173,7 @@ The extracted text is evaluated for structural signals including:
 
 ### 4. Score
 
-The five metrics are combined using their respective weights:
+Each metric contributes to the final score according to its weight:
 
 ```text
 Overall Score =
@@ -191,44 +186,31 @@ Overall Score =
 
 ### 5. Recommend
 
-Metric thresholds are used to generate strengths and targeted improvement suggestions.
-
----
-
-## Design
-
-ContentIQ uses a minimal visual system:
-
-- dark graphite background
-- electric blue accent
-- Manrope for interface text
-- JetBrains Mono for technical metadata
-
-The interface prioritizes hierarchy and clarity over decorative elements.
+Metric scores and detected signals are used to generate specific strengths and improvement suggestions.
 
 ---
 
 ## Privacy
 
-Content extraction and analysis currently happen locally in the browser.
+Content extraction and analysis happen locally in the browser.
 
-No application backend is required to receive uploaded documents, and no external AI API is required for the analysis engine.
+Uploaded files do not need to be sent to an application server, and the current analysis engine does not require an external AI API.
 
 ---
 
 ## Limitations
 
-The current analyser is deterministic and focuses on structural signals rather than semantic understanding.
+The current analysis engine is intentionally deterministic. It evaluates structural signals rather than attempting full semantic understanding.
 
-It can evaluate things such as sentence length, questions, CTA language, and interaction signals, but it cannot reliably determine whether content is factually correct, humorous, or appropriate for a specific audience.
+It can identify patterns such as sentence length, questions, CTA language, and interaction signals, but it cannot reliably judge factual accuracy, humor, audience fit, or overall creative quality.
 
-OCR accuracy may also vary depending on image quality, resolution, contrast, and background complexity.
+OCR accuracy can also vary with image resolution, text size, contrast, and background complexity.
 
 ---
 
 ## Roadmap
 
-Potential future improvements:
+Potential future improvements include:
 
 - Automated tests for the analysis engine
 - More context-aware recommendations
@@ -236,28 +218,7 @@ Potential future improvements:
 - Optional LLM-based semantic analysis
 - Version comparison
 - Historical score tracking
-- Exportable reports
-
----
-
-## Project Structure
-
-```text
-social-media-content-analyzer/
-│
-├── app/
-├── components/
-├── lib/
-├── public/
-│
-├── .gitignore
-├── next.config.ts
-├── package.json
-├── package-lock.json
-├── postcss.config.mjs
-├── README.md
-└── tsconfig.json
-```
+- Exportable analysis reports
 
 ---
 
@@ -277,4 +238,4 @@ Upload
 
 ## License
 
-This project is currently provided for evaluation and portfolio purposes.
+This project is provided for evaluation and portfolio purposes.

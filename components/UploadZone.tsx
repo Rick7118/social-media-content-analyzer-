@@ -8,8 +8,13 @@ import {
 } from "react";
 import { extractTextFromImage, OCRProgress } from "@/lib/ocr";
 import { extractTextFromPDF } from "@/lib/pdf";
+import {
+  analyzeContent,
+  AnalysisResult,
+} from "@/lib/analyser";
 import ExtractedText from "@/components/ExtractedText";
 import ProcessingState from "@/components/ProcessingState";
+import AnalysisResults from "@/components/AnalysisResults";
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -19,7 +24,12 @@ const ACCEPTED_TYPES = [
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-type ProcessingStatus = "idle" | "processing" | "complete" | "error";
+type ProcessingStatus =
+  | "idle"
+  | "extracting"
+  | "analyzing"
+  | "complete"
+  | "error";
 
 export default function UploadZone() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +37,7 @@ export default function UploadZone() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const [processingState, setProcessingState] =
     useState<ProcessingStatus>("idle");
 
@@ -36,6 +47,9 @@ export default function UploadZone() {
   });
 
   const [extractedText, setExtractedText] = useState("");
+
+  const [analysisResult, setAnalysisResult] =
+    useState<AnalysisResult | null>(null);
 
   const validateFile = (selectedFile: File) => {
     if (!ACCEPTED_TYPES.includes(selectedFile.type)) {
@@ -57,7 +71,9 @@ export default function UploadZone() {
       setFile(selectedFile);
       setProcessingState("idle");
       setExtractedText("");
+      setAnalysisResult(null);
       setError(null);
+
       setOcrProgress({
         status: "Starting extraction",
         progress: 0,
@@ -65,7 +81,9 @@ export default function UploadZone() {
     }
   };
 
-  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
     const selectedFile = event.target.files?.[0];
 
     if (selectedFile) {
@@ -73,17 +91,23 @@ export default function UploadZone() {
     }
   };
 
-  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+  const handleDragOver = (
+    event: DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (
+    event: DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     setIsDragging(false);
   };
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (
+    event: DragEvent<HTMLDivElement>,
+  ) => {
     event.preventDefault();
     setIsDragging(false);
 
@@ -99,6 +123,8 @@ export default function UploadZone() {
     setError(null);
     setProcessingState("idle");
     setExtractedText("");
+    setAnalysisResult(null);
+
     setOcrProgress({
       status: "Starting extraction",
       progress: 0,
@@ -110,7 +136,10 @@ export default function UploadZone() {
   };
 
   const openFilePicker = () => {
-    if (processingState !== "processing") {
+    if (
+      processingState !== "extracting" &&
+      processingState !== "analyzing"
+    ) {
       inputRef.current?.click();
     }
   };
@@ -130,7 +159,8 @@ export default function UploadZone() {
 
     setError(null);
     setExtractedText("");
-    setProcessingState("processing");
+    setAnalysisResult(null);
+    setProcessingState("extracting");
 
     setOcrProgress({
       status:
@@ -143,31 +173,48 @@ export default function UploadZone() {
     try {
       let text = "";
 
+      // Step 1: Extract content
       if (file.type === "application/pdf") {
-        text = await extractTextFromPDF(file, (progress) => {
-          setOcrProgress(progress);
-        });
+        text = await extractTextFromPDF(
+          file,
+          (progress) => {
+            setOcrProgress(progress);
+          },
+        );
       } else {
-        text = await extractTextFromImage(file, (progress) => {
-          setOcrProgress(progress);
-        });
+        text = await extractTextFromImage(
+          file,
+          (progress) => {
+            setOcrProgress(progress);
+          },
+        );
       }
 
-      if (!text) {
+      if (!text.trim()) {
         throw new Error(
           "No text could be extracted from this file.",
         );
       }
 
       setExtractedText(text);
+
+      // Step 2: Analyze extracted content
+      setProcessingState("analyzing");
+
+      const result = analyzeContent(text);
+
+      setAnalysisResult(result);
       setProcessingState("complete");
     } catch (processingError) {
-      console.error("Content extraction failed:", processingError);
+      console.error(
+        "Content processing failed:",
+        processingError,
+      );
 
       setError(
         processingError instanceof Error
           ? processingError.message
-          : "We couldn't extract content from this file.",
+          : "We couldn't process this file.",
       );
 
       setProcessingState("error");
@@ -179,7 +226,7 @@ export default function UploadZone() {
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.png,.jpg,.jpeg"
+        accept=".pdf,.jpg,.jpeg,.png"
         onChange={handleInputChange}
         className="hidden"
       />
@@ -191,7 +238,10 @@ export default function UploadZone() {
             tabIndex={0}
             onClick={openFilePicker}
             onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
+              if (
+                event.key === "Enter" ||
+                event.key === " "
+              ) {
                 openFilePicker();
               }
             }}
@@ -224,7 +274,9 @@ export default function UploadZone() {
               </div>
 
               <h2 className="text-xl font-semibold tracking-tight">
-                {isDragging ? "Drop it here" : "Drop your content here"}
+                {isDragging
+                  ? "Drop it here"
+                  : "Drop your content here"}
               </h2>
 
               <p className="mt-2 text-sm text-[var(--muted)]">
@@ -232,14 +284,16 @@ export default function UploadZone() {
               </p>
 
               <div className="mt-7 flex flex-wrap justify-center gap-2">
-                {["PDF", "PNG", "JPG", "JPEG"].map((type) => (
-                  <span
-                    key={type}
-                    className="rounded-full border border-[var(--border)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)]"
-                  >
-                    {type}
-                  </span>
-                ))}
+                {["PDF", "PNG", "JPG", "JPEG"].map(
+                  (type) => (
+                    <span
+                      key={type}
+                      className="rounded-full border border-[var(--border)] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)]"
+                    >
+                      {type}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           </div>
@@ -280,10 +334,13 @@ export default function UploadZone() {
         </>
       ) : (
         <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6">
+          {/* File header */}
           <div className="flex items-center justify-between gap-6">
             <div className="flex min-w-0 items-center gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--background)] font-mono text-xs text-[var(--accent)]">
-                {file.type === "application/pdf" ? "PDF" : "IMG"}
+                {file.type === "application/pdf"
+                  ? "PDF"
+                  : "IMG"}
               </div>
 
               <div className="min-w-0">
@@ -300,29 +357,90 @@ export default function UploadZone() {
             <button
               type="button"
               onClick={removeFile}
-              disabled={processingState === "processing"}
+              disabled={
+                processingState === "extracting" ||
+                processingState === "analyzing"
+              }
               className="shrink-0 font-mono text-[10px] uppercase tracking-wider text-[var(--muted)] transition-colors hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Remove
             </button>
           </div>
 
-          {processingState === "processing" && (
-            <ProcessingState progress={ocrProgress} />
-          )}
-
-          {processingState === "complete" && (
-            <ExtractedText
-              text={extractedText}
-              onAnalyzeAgain={handleAnalyze}
+          {/* Extraction loading state */}
+          {processingState === "extracting" && (
+            <ProcessingState
+              progress={ocrProgress}
             />
           )}
 
+          {/* Analysis loading state */}
+          {processingState === "analyzing" && (
+            <div className="mt-8 border-t border-[var(--border)] pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--accent)]">
+                    Analyzing content
+                  </p>
+
+                  <p className="mt-2 text-sm text-[var(--muted)]">
+                    Evaluating structure and engagement
+                    signals...
+                  </p>
+                </div>
+
+                <span className="font-mono text-sm text-[var(--accent)]">
+                  100%
+                </span>
+              </div>
+
+              <div className="mt-4 h-1 overflow-hidden rounded-full bg-[var(--border)]">
+                <div className="h-full w-full bg-[var(--accent)]" />
+              </div>
+
+              <div className="mt-5 space-y-2 font-mono text-[10px] uppercase tracking-wider">
+                <p className="text-[var(--accent)]">
+                  ✓ File validated
+                </p>
+
+                <p className="text-[var(--accent)]">
+                  ✓ Text extracted
+                </p>
+
+                <p className="text-[var(--foreground)]">
+                  ◉ Evaluating content
+                </p>
+
+                <p className="text-[var(--muted)]">
+                  ○ Generating recommendations
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Results */}
+          {processingState === "complete" && (
+            <>
+              <ExtractedText
+                text={extractedText}
+                onAnalyzeAgain={handleAnalyze}
+              />
+
+              {analysisResult && (
+                <AnalysisResults
+                  result={analysisResult}
+                  onAnalyzeAgain={handleAnalyze}
+                />
+              )}
+            </>
+          )}
+
+          {/* Error */}
           {processingState === "error" && error && (
             <div className="mt-8 border-t border-[var(--border)] pt-6">
               <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5">
                 <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-red-400">
-                  Extraction failed
+                  Processing failed
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
@@ -340,6 +458,7 @@ export default function UploadZone() {
             </div>
           )}
 
+          {/* Initial analyze button */}
           {processingState === "idle" && (
             <button
               type="button"

@@ -10,7 +10,10 @@ export default function Navbar() {
           aria-label="ContentIQ home"
         >
           <span className="h-2.5 w-2.5 rounded-full bg-[var(--accent)] transition-transform duration-300 group-hover:scale-125" />
-          <span className="text-lg font-bold tracking-tight">ContentIQ</span>
+
+          <span className="text-lg font-bold tracking-tight">
+            ContentIQ
+          </span>
         </Link>
 
         <div className="flex items-center gap-6">
@@ -20,12 +23,12 @@ export default function Navbar() {
 
           <span className="h-1 w-1 rounded-full bg-[var(--border)]" />
 
-          <button
-            type="button"
+          <Link
+            href="#how-it-works"
             className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--muted)] transition-colors hover:text-[var(--foreground)]"
           >
             How it works
-          </button>
+          </Link>
         </div>
       </nav>
     </header>
